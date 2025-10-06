@@ -63,6 +63,13 @@ export class IncrementalSHA256 {
     if (!(chunk instanceof Uint8Array)) throw new TypeError('IncrementalSHA256.update expects a Uint8Array');
     if (chunk.length === 0) return;
 
+    // If the buffer is already full from a previous operation (e.g. importState),
+    // the loop below will be infinite. Process the block BEFORE copying new data.
+    if (this.bufferLength === 64) {
+      this._processBlock();
+      this.bufferLength = 0;
+    }
+
     const newTotal = this.bytesHashed + chunk.length;
     if (!Number.isSafeInteger(newTotal) || newTotal > MAX_BYTES_FOR_SAFE_BITLENGTH) {
       throw new Error('Input too large: would exceed safe bit-length precision');
@@ -211,7 +218,7 @@ export class IncrementalSHA256 {
     if (!state || !Array.isArray(state.H) || state.H.length !== 8) throw new TypeError('Invalid SHA-256 state: H must be array of 8 integers');
     if (!Array.isArray(state.buffer) || state.buffer.length > 64) throw new TypeError('Invalid SHA-256 state: buffer must be array of <=64 bytes');
     const bl = Number(state.bufferLength);
-    if (!Number.isInteger(bl) || bl < 0 || bl >= 64) throw new TypeError('Invalid SHA-256 state: bufferLength must be integer 0..63');
+    if (!Number.isInteger(bl) || bl < 0 || bl > 64) throw new TypeError('Invalid SHA-256 state: bufferLength must be integer 0..64');
     const bytesHashed = Number(state.bytesHashed);
     if (!Number.isFinite(bytesHashed) || bytesHashed < 0 || !Number.isSafeInteger(bytesHashed) || bytesHashed > MAX_BYTES_FOR_SAFE_BITLENGTH) {
       throw new TypeError('Invalid SHA-256 state: bytesHashed too large to represent bit-length safely');
