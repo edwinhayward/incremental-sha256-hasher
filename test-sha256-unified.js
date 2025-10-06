@@ -2,6 +2,10 @@ const { IncrementalSHA256 } = require('./Hasher.js');
 const crypto = require('crypto');
 
 function assertEqual(a, b, msg) {
+  if (typeof a === 'number' && typeof b === 'number') {
+    if (a !== b) throw new Error(`${msg} failed: ${a} !== ${b}`);
+    return;
+  }
   if (typeof a === 'string' || a instanceof String) {
     if (a !== b) throw new Error(`${msg} failed: ${a} !== ${b}`);
   } else if (a instanceof Uint8Array) {
@@ -10,7 +14,7 @@ function assertEqual(a, b, msg) {
       if (a[i] !== b[i]) throw new Error(`${msg} failed at index ${i}: ${a[i]} !== ${b[i]}`);
     }
   } else {
-    throw new TypeError(`${msg} failed: unsupported type comparison`);
+    throw new TypeError(`${msg} failed: unsupported type comparison for ${typeof a}`);
   }
 }
 
@@ -156,10 +160,37 @@ runTest("Import bad H length error", () => {
 });
 runTest("Import invalid bufferLength error", () => {
   const hInvalid = new IncrementalSHA256();
-  assertThrows(() => hInvalid.importState({H:new Array(8).fill(0), buffer:[], bufferLength:64, bytesHashed:0}), "Import invalid bufferLength");
+  assertThrows(() => hInvalid.importState({H:new Array(8).fill(0), buffer:[], bufferLength:65, bytesHashed:0}), "Import invalid bufferLength > 64");
 });
 
-// --- 11. Zero-length export/import
+// --- 11. Import state with full buffer (edge case)
+runTest("Import state with full buffer", () => {
+  // 1. Manually construct a state with a full buffer.
+  const h_initial = new IncrementalSHA256();
+  const initial_state = h_initial.exportState(); // Gets us H0
+
+  const fullBufferContent = Buffer.from('a'.repeat(64));
+  const state_to_import = {
+    H: initial_state.H, // Initial H0 values
+    buffer: Array.from(fullBufferContent),
+    bufferLength: 64,
+    bytesHashed: 64, // We've "processed" 64 bytes into the buffer
+    finalized: false,
+  };
+
+  // 2. Import this state. Then, update with more data.
+  const h2 = new IncrementalSHA256();
+  h2.importState(state_to_import);
+  const suffix = Buffer.from('b');
+  h2.update(suffix);
+
+  // 3. Verify the final hash is correct.
+  const finalData = Buffer.concat([fullBufferContent, suffix]);
+  const expectedHash = crypto.createHash('sha256').update(finalData).digest('hex');
+  assertEqual(h2.digest('hex'), expectedHash, "Importing full buffer state and updating");
+});
+
+// --- 12. Zero-length export/import
 runTest("Zero-length export/import", () => {
   const hZero = new IncrementalSHA256();
   const stateZero = hZero.exportState();
@@ -169,7 +200,7 @@ runTest("Zero-length export/import", () => {
   assertEqual(hZero2.digest('hex'), crypto.createHash('sha256').update("abc").digest('hex'), "Zero-length export/import");
 });
 
-// --- 12. Fuzz testing (randomized chunk splits)
+// --- 13. Fuzz testing (randomized chunk splits)
 function randomString(length) {
   const chars = [];
   for (let i = 0; i < length; i++) {
