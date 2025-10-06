@@ -200,7 +200,21 @@ runTest("Zero-length export/import", () => {
   assertEqual(hZero2.digest('hex'), crypto.createHash('sha256').update("abc").digest('hex'), "Zero-length export/import");
 });
 
-// --- 13. Fuzz testing (randomized chunk splits)
+// --- 13. Reset functionality
+runTest("Reset functionality", () => {
+  const h = new IncrementalSHA256();
+  h.update(Buffer.from("initial data"));
+  h.digest(); // Finalize
+
+  // Reset should allow for reuse
+  h.reset();
+  h.update(Buffer.from("new data"));
+  const newDigest = h.digest('hex');
+  const expected = crypto.createHash('sha256').update("new data").digest('hex');
+  assertEqual(newDigest, expected, "Reset functionality");
+});
+
+// --- 14. Fuzz testing (randomized chunk splits)
 function randomString(length) {
   const chars = [];
   for (let i = 0; i < length; i++) {
